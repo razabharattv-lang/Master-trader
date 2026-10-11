@@ -1,0 +1,7 @@
+{
+  "name": "Master Trader",
+  "description": "Institutional intraday quantitative trading strategist and AI assistant",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
