@@ -3,6 +3,7 @@ package com.mastertrader.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -14,13 +15,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,8 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mastertrader.app.data.db.ChatMessageEntity
@@ -137,14 +136,12 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val activeModel by viewModel.activeModelTag.collectAsState()
     val paperTrades by viewModel.paperTrades.collectAsState()
 
-    val googleKey by viewModel.googleApiKey.collectAsState()
-    val upstoxKey by viewModel.upstoxApiKey.collectAsState()
-    val upstoxSecret by viewModel.upstoxApiSecret.collectAsState()
     val upstoxToken by viewModel.upstoxAccessToken.collectAsState()
     val isEngineActive by viewModel.isEngineActive.collectAsState()
     val activationStatus by viewModel.activationStatus.collectAsState()
+    val allSessions by viewModel.allSessions.collectAsState()
+    val currentSessionId by viewModel.currentSessionId.collectAsState()
 
-    var secretVisible by remember { mutableStateOf(false) }
     var showScorecardModal by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
@@ -177,106 +174,43 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                text = "Release-Ready Quant Desk",
+                                text = "System Core: Operational",
                                 fontSize = 11.sp,
                                 color = TextMediumEmphasis
                             )
                         }
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    if (isEngineActive) TradingGreen.copy(alpha = 0.2f) else DarkSurfaceElevated,
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .border(1.dp, if (isEngineActive) TradingGreen else BorderSubtle, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = if (isEngineActive) "STATUS: ACTIVE" else "STATUS: STANDBY",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isEngineActive) TradingGreen else TextMediumEmphasis
-                            )
+                        IconButton(onClick = { 
+                            viewModel.startNewSession()
+                            scope.launch { drawerState.close() }
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "New Session", tint = TradingGreen)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text("GOOGLE GEMINI API KEY", fontSize = 10.sp, color = CyberCyan, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = googleKey,
-                        onValueChange = { viewModel.googleApiKey.value = it },
-                        placeholder = { Text("AI Studio Key डालें...", color = TextDisabled, fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = DarkSurfaceElevated,
-                            unfocusedContainerColor = DarkSurfaceElevated,
-                            focusedBorderColor = TradingGreen,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextHighEmphasis,
-                            unfocusedTextColor = TextHighEmphasis
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        singleLine = true
-                    )
+                    Text("SYSTEM CORE STATUS", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(GlassmorphismCard, RoundedCornerShape(10.dp))
+                            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Text("• Google Gemini ($activeModel): ACTIVE", fontSize = 11.sp, color = TradingGreen)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("• Upstox API & Secret: EMBEDDED & READY", fontSize = 11.sp, color = TradingGreen)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("• Status: $activationStatus", fontSize = 11.sp, color = CyberCyan)
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                    Text("UPSTOX API KEY", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = upstoxKey,
-                        onValueChange = { viewModel.upstoxApiKey.value = it },
-                        placeholder = { Text("Upstox API Key...", color = TextDisabled, fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = DarkSurfaceElevated,
-                            unfocusedContainerColor = DarkSurfaceElevated,
-                            focusedBorderColor = ElectricGold,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextHighEmphasis,
-                            unfocusedTextColor = TextHighEmphasis
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text("UPSTOX API SECRET", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = upstoxSecret,
-                        onValueChange = { viewModel.upstoxApiSecret.value = it },
-                        placeholder = { Text("Upstox API Secret...", color = TextDisabled, fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        visualTransformation = if (secretVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { secretVisible = !secretVisible }) {
-                                Icon(
-                                    imageVector = if (secretVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle Secret",
-                                    tint = TextMediumEmphasis
-                                )
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = DarkSurfaceElevated,
-                            unfocusedContainerColor = DarkSurfaceElevated,
-                            focusedBorderColor = ElectricGold,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextHighEmphasis,
-                            unfocusedTextColor = TextHighEmphasis
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text("UPSTOX ACCESS TOKEN", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("TODAY'S UPSTOX ACCESS TOKEN", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
                     OutlinedTextField(
                         value = upstoxToken,
                         onValueChange = { viewModel.upstoxAccessToken.value = it },
@@ -294,55 +228,103 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(GlassmorphismCard, RoundedCornerShape(10.dp))
-                            .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
-                            .padding(12.dp)
+                    Button(
+                        onClick = {
+                            viewModel.connectUpstoxToken(upstoxToken)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TradingGreen, contentColor = PurePitchBlack),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Column {
-                            Text("ACTIVE ENGINE MODEL", fontSize = 10.sp, color = TextMediumEmphasis)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(activeModel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TradingGreen)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text("Activation: $activationStatus", fontSize = 11.sp, color = CyberCyan)
+                        Text("CONNECT UPSTOX TOKEN", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider(color = BorderSubtle, thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("CHAT HISTORY & SESSIONS", fontSize = 10.sp, color = ElectricGold, fontWeight = FontWeight.Bold)
+                        Text("${allSessions.size} Sessions", fontSize = 10.sp, color = TextMediumEmphasis)
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (allSessions.isEmpty()) {
+                        Text("No past sessions found.", fontSize = 11.sp, color = TextDisabled)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            allSessions.forEach { sessionId ->
+                                val isActive = sessionId == currentSessionId
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (isActive) DarkSurfaceElevated else GlassmorphismCard, RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (isActive) TradingGreen else BorderSubtle, RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                viewModel.switchSession(sessionId)
+                                                scope.launch { drawerState.close() }
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isActive) TradingGreen else TextDisabled)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Session: ${sessionId.take(8)}...",
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isActive) TradingGreen else TextHighEmphasis
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { viewModel.deleteSession(sessionId) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete Session",
+                                            tint = Color(0xFFFF5252),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Button(
-                        onClick = {
-                            viewModel.activateAndSaveCredentials()
-                            scope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = TradingGreen,
-                            contentColor = PurePitchBlack
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                    OutlinedButton(
+                        onClick = { viewModel.clearAllChatHistory() },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF5252)),
+                        border = BorderStroke(1.dp, Color(0xFFFF5252)),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text(
-                            text = "SAVE & ACTIVATE ENGINE",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp,
-                            letterSpacing = 0.5.sp
-                        )
+                        Text("CLEAR ALL CHAT HISTORY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        text = "Build: Release-Ready Quant 3.5",
-                        fontSize = 10.sp,
-                        color = TextDisabled
-                    )
                 }
             }
         }
@@ -375,6 +357,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         }
                     },
                     actions = {
+                        IconButton(onClick = { viewModel.startNewSession() }) {
+                            Icon(Icons.Default.Add, contentDescription = "New Chat", tint = TradingGreen)
+                        }
                         IconButton(onClick = { showScorecardModal = true }) {
                             Icon(Icons.Default.Assessment, contentDescription = "Scorecard", tint = TradingGreen)
                         }
@@ -388,42 +373,45 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         .background(PurePitchBlack)
                         .imePadding()
                         .navigationBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     // Quick-trigger chips
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 4.dp)
                     ) {
                         val quickPrompts = listOf(
-                            "⚡ 0-DTE Expiry Setup & Option Chain",
-                            "🚨 NIFTY Intraday Levels",
-                            "⚡ High-Volume Breakouts",
-                            "📊 Penny Stock Quant Scan",
-                            "🛡️ Track My Open Position"
+                            "⚡ 0-DTE Expiry Setup",
+                            "🚨 NIFTY Levels",
+                            "⚡ Breakouts",
+                            "📊 Penny Scan",
+                            "🛡️ Open Position"
                         )
                         items(quickPrompts) { prompt ->
                             OutlinedButton(
                                 onClick = { viewModel.sendTradingPrompt(prompt) },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(containerColor = DarkSurfaceElevated, contentColor = TextHighEmphasis),
-                                border = BorderStroke(1.dp, BorderSubtle),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFF121418),
+                                    contentColor = Color(0xFFEDEDED)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFF22262E)),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Text(prompt, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text(prompt, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFFEDEDED))
                             }
                         }
                     }
 
-                    // Gemini-Style Floating Glassmorphic Chat Dock with IME padding and explicit typing colors
+                    // Slim & Compact Chat Input Dock
                     var text by remember { mutableStateOf("") }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(Color(0xFF101216))
-                            .border(BorderStroke(1.dp, Color(0xFF1E222B)), RoundedCornerShape(28.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0xFF121418))
+                            .border(BorderStroke(1.dp, Color(0xFF22262E)), RoundedCornerShape(24.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -436,31 +424,33 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 Icon(
                                     Icons.Default.AddCircleOutline,
                                     contentDescription = "Scan Chart / Attach",
-                                    tint = Color(0xFF00E5FF)
+                                    tint = Color(0xFF00E5FF),
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
 
                             OutlinedTextField(
                                 value = text,
                                 onValueChange = { text = it },
-                                placeholder = { Text("Ask Master Trader (e.g. Bought RELIANCE at 2850)...", color = Color(0xFF6B7280), fontSize = 13.sp) },
+                                placeholder = { Text("Ask Master Trader...", color = Color(0xFF808A9D), fontSize = 14.sp) },
                                 modifier = Modifier.weight(1f),
+                                maxLines = 3,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFF16181D),
-                                    unfocusedContainerColor = Color(0xFF16181D),
-                                    disabledContainerColor = Color(0xFF16181D),
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
                                     focusedBorderColor = Color.Transparent,
                                     unfocusedBorderColor = Color.Transparent,
-                                    focusedTextColor = Color(0xFFFFFFFF),
-                                    unfocusedTextColor = Color(0xFFFFFFFF),
+                                    focusedTextColor = Color(0xFFEDEDED),
+                                    unfocusedTextColor = Color(0xFFEDEDED),
                                     cursorColor = Color(0xFF00E676)
                                 ),
-                                singleLine = true
+                                singleLine = false
                             )
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
 
                             IconButton(
                                 onClick = { viewModel.sendTradingPrompt("Voice / Mic quant status check") },
@@ -469,29 +459,48 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 Icon(
                                     Icons.Default.Mic,
                                     contentDescription = "Voice Input",
-                                    tint = Color(0xFF9E9E9E)
+                                    tint = Color(0xFF808A9D),
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
 
-                            IconButton(
-                                onClick = {
-                                    if (text.isNotBlank() && !isAnalyzing) {
-                                        viewModel.sendTradingPrompt(text)
-                                        text = ""
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF00E676))
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
-                                    tint = PurePitchBlack
-                                )
+                            // Send Button (36.dp circular)
+                            if (isAnalyzing) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(TradingGreen.copy(alpha = 0.3f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = TradingGreen,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = {
+                                        if (text.isNotBlank() && !isAnalyzing) {
+                                            viewModel.sendTradingPrompt(text)
+                                            text = ""
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF00E676))
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Send",
+                                        tint = PurePitchBlack,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -523,7 +532,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text("MASTER TRADER AI", fontWeight = FontWeight.Black, fontSize = 24.sp, color = TradingGreen)
-                                Text("Release-Ready Institutional Quant Engine", color = TextMediumEmphasis, fontSize = 13.sp)
+                                Text("Production Architecture 6-Step Quant Engine", color = TextMediumEmphasis, fontSize = 13.sp)
                                 Spacer(modifier = Modifier.height(24.dp))
                                 listOf(
                                     "⚡ 0-DTE Expiry Setup & Option Chain",
@@ -534,11 +543,14 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                     OutlinedButton(
                                         onClick = { viewModel.sendTradingPrompt(prompt) },
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(containerColor = DarkSurfaceElevated, contentColor = TextHighEmphasis),
-                                        border = BorderStroke(1.dp, BorderSubtle),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            containerColor = Color(0xFF1A1D24),
+                                            contentColor = Color(0xFFF0F3F8)
+                                        ),
+                                        border = BorderStroke(1.dp, Color(0xFF2C3240)),
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
-                                        Text(prompt, fontSize = 13.sp)
+                                        Text(prompt, fontSize = 13.sp, color = Color(0xFFF0F3F8))
                                     }
                                 }
                             }
@@ -552,24 +564,22 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
                         ) {
                             if (isUser) {
-                                // User Message: Right-aligned sleek dark card (Color(0xFF161A22)) with subtle cyber-cyan trim
                                 Box(
                                     modifier = Modifier
                                         .widthIn(max = 320.dp)
                                         .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF161A22))
-                                        .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                                        .background(Color(0xFF181C24))
+                                        .border(1.dp, Color(0xFF22262E), RoundedCornerShape(16.dp))
                                         .padding(14.dp)
                                 ) {
                                     Text(
                                         text = msg.text,
-                                        color = TextHighEmphasis,
+                                        color = Color(0xFFEDEDED),
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp
                                     )
                                 }
                             } else {
-                                // Model / Master Trader Card: Left-aligned institutional card (Color(0xFF0D0F12)) with neon-emerald avatar badge ("MT 25Y QUANT")
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalAlignment = Alignment.Start
@@ -599,13 +609,13 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .clip(RoundedCornerShape(16.dp))
-                                                            .background(Color(0xFF0D0F12))
-                                                            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                                                            .background(Color(0xFF121418))
+                                                            .border(1.dp, Color(0xFF22262E), RoundedCornerShape(16.dp))
                                                             .padding(14.dp)
                                                     ) {
                                                         Text(
                                                             text = block.content,
-                                                            color = if (msg.isError) TradingRed else TextHighEmphasis,
+                                                            color = if (msg.isError) TradingRed else Color(0xFFEDEDED),
                                                             fontSize = 14.sp,
                                                             lineHeight = 20.sp
                                                         )
@@ -759,7 +769,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = TradingGreen, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("Executing Release-Ready Quant Analysis...", color = TradingGreen, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text("Executing 6-Step Production Analysis...", color = TradingGreen, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                     }

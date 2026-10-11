@@ -4,7 +4,9 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.GET
@@ -31,6 +33,11 @@ interface UpstoxApiService {
         @Query("instrument_key") underlyingKey: String,
         @Query("expiry_date") expiryDate: String
     ): UpstoxOptionChainResponse
+
+    @GET("v2/user/profile")
+    suspend fun validateProfile(
+        @Header("Authorization") bearerToken: String
+    ): Response<ResponseBody>
 }
 
 data class UpstoxQuoteResponse(

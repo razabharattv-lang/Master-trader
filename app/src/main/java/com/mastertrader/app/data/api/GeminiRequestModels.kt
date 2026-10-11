@@ -2,15 +2,10 @@ package com.mastertrader.app.data.api
 
 import com.squareup.moshi.Json
 
-data class Tool(
-    @field:Json(name = "googleSearch") val googleSearch: Map<String, String>? = emptyMap()
-)
-
 data class GenerateContentRequest(
     @field:Json(name = "contents") val contents: List<Content>,
     @field:Json(name = "systemInstruction") val systemInstruction: Content? = null,
-    @field:Json(name = "generationConfig") val generationConfig: GenerationConfig? = null,
-    @field:Json(name = "tools") val tools: List<Tool>? = listOf(Tool())
+    @field:Json(name = "generationConfig") val generationConfig: GenerationConfig? = null
 )
 
 data class Content(

@@ -10,9 +10,8 @@ import retrofit2.http.*
 import java.util.concurrent.TimeUnit
 
 interface GeminiApiService {
-    @POST("v1beta/models/{model}:generateContent")
+    @POST("v1beta/models/gemini-3.5-flash-lite:generateContent")
     suspend fun generateContent(
-        @Path("model") model: String,
         @Query("key") apiKey: String,
         @Body request: GenerateContentRequest
     ): GenerateContentResponse

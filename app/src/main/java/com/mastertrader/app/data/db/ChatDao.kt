@@ -26,6 +26,12 @@ interface ChatDao {
     @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun deleteMessagesForSession(sessionId: String)
 
+    @Query("DELETE FROM chat_messages")
+    suspend fun clearAllHistory()
+
+    @Query("SELECT DISTINCT sessionId FROM chat_messages ORDER BY timestamp DESC")
+    fun getAllSessionIds(): Flow<List<String>>
+
     @Query("SELECT * FROM active_trades ORDER BY timestamp DESC")
     fun getActiveTrades(): Flow<List<ActiveTradeEntity>>
 

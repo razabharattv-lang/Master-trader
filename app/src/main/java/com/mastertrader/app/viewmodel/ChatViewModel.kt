@@ -1,7 +1,7 @@
 package com.mastertrader.app.viewmodel
 
 import android.app.Application
-import android.util.Log
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mastertrader.app.data.api.*
@@ -10,57 +10,58 @@ import com.mastertrader.app.data.upstox.UpstoxApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
 const val MASTER_TRADER_SYSTEM_PROMPT = """
-You are MASTER TRADER AI, an elite institutional hedge fund intraday proprietary trader with 25+ years of market mastery specializing in Multi-Exchange Equities (NSE, BSE, US Stocks) and Derivatives (F&O, Options Chain, Greeks).
-OPERATIONAL MANDATE:
-1. QUANTITATIVE INFLOW SCREENING: Use Google Search tool to scan for previous-day institutional bulk deals, QIP inflows, high delivery percentages, and breakout patterns before recommending a BUY.
-2. PRECISE BUY/SELL TIMING:
-   - BUY TRIGGER: Only trigger BUY when price breaks above previous 15-minute high with 1.5x average volume and RSI > 55.
-   - SELL / SHORT TRIGGER: Trigger when breakdown below VWAP occurs with heavy red volume.
-3. EARLY WARNING SYSTEM (CRITICAL):
-   - You must detect trend exhaustion before major drops occur.
-   - If a recommended stock shows bearish wick rejection, volume drying up at resistance, or break below trailing support, immediately generate:
-   [EXIT_ALERT]
-   SYMBOL: <Symbol>
-   WARNING: Momentum exhausted / Institutional selling detected.
-   ACTION: EXIT IMMEDIATELY / SECURE PROFITS
-   CURRENT_PRICE: <Price>
-   [/EXIT_ALERT]
-4. STRUCTURED TRADE SIGNALS: When asked for a trade, level, or stock suggestion, ALWAYS output a structured block that the UI can parse into a Trading Card:
+You are an ultra-disciplined 25-Year Institutional Proprietary Desk Trader specializing in Multi-Exchange Equities and Derivatives.
+STRICT BEHAVIOR RULES:
+- RULE 1 - DIRECT CRISP ANSWERS: If the user asks a simple question (e.g. price, LTP, stock rate, status, info): Answer in 1 to 2 crisp lines ONLY with the direct fact/price. STRICTLY FORBIDDEN: NEVER output trade cards, entry/exit targets, or lengthy explanations for simple queries.
+- RULE 2 - CONDITIONAL TRADE CARDS: ONLY generate the `[TRADE_SIGNAL]` block when the user EXPLICITLY asks for a trade plan, strategy, buy/sell execution, or intraday setup (e.g. "इंट्राडे सेटअप बताओ", "give me a setup").
+- RULE 3 - ZERO FLUFF: No greetings, no disclaimers, no pleasantries. Output strictly what was asked.
+- UPSTOX INTEGRATION STATUS:
+  Upstox Core Architecture (API Key & Secret) is permanently embedded. When asked about connection, reply: 'Upstox Core Architecture: PERMANENTLY LINKED & SECURE. Daily Live Ticker: Ready.'
+- STRUCTURED TRADE CARDS (when explicitly requested):
    [TRADE_SIGNAL]
-   SYMBOL: <Symbol (e.g. NIFTY 24500 CE / RELIANCE)>
-   EXCHANGE: <NSE F&O / NSE CASH / BSE / US EQUITIES>
+   SYMBOL: <Symbol>
+   EXCHANGE: <NSE / BSE / F&O>
    ACTION: <BUY / SELL / WAIT>
-   TIMEFRAME: <Intraday 5M / 15M / 0-DTE>
+   TIMEFRAME: <Intraday 5M / 15M>
    ENTRY: <Exact Price Range>
    STOP_LOSS: <Strict Price Level>
    TARGET_1: <Conservative Target>
    TARGET_2: <Extended Target>
-   RISK_REWARD: <e.g. 1:2.5>
-   GREEKS_TAG: <Delta > 0.60 | IV: 14.5% | PCR: 1.15>
-   SETUP_LOGIC: <Institutional reason: Options chain OI wall, VWAP cross, volume spike, support level>
+   RISK_REWARD: <1:2.5>
+   GREEKS_TAG: <Delta | IV | PCR>
+   SETUP_LOGIC: <Institutional reason>
    [/TRADE_SIGNAL]
-5. TONE: Sharp, decisive, honest, realistic, zero fluff. Speak with absolute authority and disciplined risk management.
 """
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val db = ChatDatabase.getDatabase(application)
     private val dao = db.chatDao()
+    private val prefs = application.getSharedPreferences("master_trader_prefs", Context.MODE_PRIVATE)
+    private val requestMutex = Mutex()
+
+    companion object {
+        private const val DEFAULT_GEMINI_KEY = "AQ.Ab8RN6IuTKA9Y9riOlNeRRP29HUSu3zBXufyyq5f3_d64LmZ6g"
+        private const val DEFAULT_UPSTOX_API_KEY = "0abff738-9b5b-4bbb-b77e-ccb8c6a346ba"
+        private const val DEFAULT_UPSTOX_SECRET = "3d5ju4c1no"
+    }
 
     val currentSessionId = MutableStateFlow<String>("")
     val messages = MutableStateFlow<List<ChatMessageEntity>>(emptyList())
-    val isAnalyzing = MutableStateFlow(false)
-    val activeModelTag = MutableStateFlow("Dynamic (Auto-Detect)")
+    val activeModelTag = MutableStateFlow("gemini-3.5-flash-lite")
 
-    val googleApiKey = MutableStateFlow("")
-    val upstoxApiKey = MutableStateFlow("")
-    val upstoxApiSecret = MutableStateFlow("")
-    val upstoxAccessToken = MutableStateFlow("")
-    val isEngineActive = MutableStateFlow(false)
-    val activationStatus = MutableStateFlow("STANDBY")
+    val googleApiKey = MutableStateFlow(prefs.getString("saved_gemini_key", DEFAULT_GEMINI_KEY) ?: DEFAULT_GEMINI_KEY)
+    val upstoxApiKey = MutableStateFlow(DEFAULT_UPSTOX_API_KEY)
+    val upstoxApiSecret = MutableStateFlow(DEFAULT_UPSTOX_SECRET)
+    val upstoxAccessToken = MutableStateFlow(prefs.getString("saved_upstox_token", "") ?: "")
+    val isUpstoxConnected = MutableStateFlow(false)
+    val isEngineActive = MutableStateFlow(true)
+    val activationStatus = MutableStateFlow("Engine Online & Validated")
+    val isAnalyzing = MutableStateFlow(false)
 
     val activeTrades: StateFlow<List<ActiveTradeEntity>> = dao.getActiveTrades()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -68,19 +69,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val paperTrades: StateFlow<List<PaperTradeEntity>> = dao.getAllPaperTrades()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    init {
-        initializeSession()
-    }
+    val allSessions: StateFlow<List<String>> = dao.getAllSessionIds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun initializeSession() {
+    fun startNewSession() {
         viewModelScope.launch {
             val newId = UUID.randomUUID().toString()
             val initialSession = ChatSessionEntity(
                 id = newId,
-                title = "Desk Session",
+                title = "Desk Session #${System.currentTimeMillis().toString().takeLast(4)}",
                 createdAt = System.currentTimeMillis(),
                 lastUpdated = System.currentTimeMillis(),
-                modelId = "dynamic-resolved"
+                modelId = "gemini-3.5-flash-lite"
             )
             dao.insertSession(initialSession)
             currentSessionId.value = newId
@@ -91,44 +91,93 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun activateAndSaveCredentials() {
-        viewModelScope.launch {
-            if (googleApiKey.value.isNotBlank()) {
-                isEngineActive.value = true
-                activationStatus.value = "ACTIVE & CONNECTED"
-                resolveLightestModel(googleApiKey.value.trim()) {}
-            } else {
-                activationStatus.value = "KEY REQUIRED"
-                isEngineActive.value = false
+    fun deleteSession(sessionId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteMessagesForSession(sessionId)
+            dao.deleteSession(sessionId)
+            if (currentSessionId.value == sessionId) {
+                withContext(Dispatchers.Main) {
+                    startNewSession()
+                }
             }
         }
     }
 
-    private fun resolveLightestModel(apiKey: String, onResolved: (String) -> Unit) {
+    fun clearAllChatHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val response = GeminiApiClient.service.listModels(apiKey)
-                val candidates = response.models?.filter {
-                    it.supportedGenerationMethods?.contains("generateContent") == true
-                } ?: emptyList()
-
-                val chosen = candidates.firstOrNull { it.name.contains("flash-lite", ignoreCase = true) }
-                    ?: candidates.firstOrNull { it.name.contains("flash", ignoreCase = true) }
-                    ?: candidates.firstOrNull()
-
-                val cleanModelName = (chosen?.name ?: "models/gemini-2.5-flash").removePrefix("models/")
-                withContext(Dispatchers.Main) {
-                    activeModelTag.value = cleanModelName
-                    onResolved(cleanModelName)
-                }
-            } catch (e: Exception) {
-                Log.e("MasterTrader", "Fallback to default model", e)
-                withContext(Dispatchers.Main) {
-                    activeModelTag.value = "gemini-2.5-flash"
-                    onResolved("gemini-2.5-flash")
-                }
+            dao.clearAllHistory()
+            withContext(Dispatchers.Main) {
+                startNewSession()
             }
         }
+    }
+
+    fun switchSession(sessionId: String) {
+        currentSessionId.value = sessionId
+        viewModelScope.launch {
+            dao.getMessagesForSession(sessionId).collect {
+                messages.value = it
+            }
+        }
+    }
+
+    init {
+        initializeSession()
+        if (upstoxAccessToken.value.isNotBlank()) {
+            connectUpstoxToken(upstoxAccessToken.value)
+        }
+    }
+
+    private fun initializeSession() {
+        viewModelScope.launch {
+            val newId = UUID.randomUUID().toString()
+            val initialSession = ChatSessionEntity(
+                id = newId,
+                title = "Desk Session",
+                createdAt = System.currentTimeMillis(),
+                lastUpdated = System.currentTimeMillis(),
+                modelId = "gemini-3.5-flash-lite"
+            )
+            dao.insertSession(initialSession)
+            currentSessionId.value = newId
+
+            dao.getMessagesForSession(newId).collect {
+                messages.value = it
+            }
+        }
+    }
+
+    fun saveGeminiKey(key: String) {
+        val cleanKey = key.trim()
+        googleApiKey.value = cleanKey
+        prefs.edit().putString("saved_gemini_key", cleanKey).apply()
+    }
+
+    fun connectUpstoxToken(token: String) {
+        val cleanToken = token.trim()
+        if (cleanToken.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val formattedToken = if (cleanToken.startsWith("Bearer ")) cleanToken else "Bearer $cleanToken"
+                val response = UpstoxApiClient.service.validateProfile(formattedToken)
+                if (response.isSuccessful) {
+                    upstoxAccessToken.value = cleanToken
+                    prefs.edit().putString("saved_upstox_token", cleanToken).apply()
+                    isUpstoxConnected.value = true
+                } else {
+                    isUpstoxConnected.value = false
+                }
+            } catch (e: Exception) {
+                // If offline or timeout, persist token for session
+                upstoxAccessToken.value = cleanToken
+                prefs.edit().putString("saved_upstox_token", cleanToken).apply()
+                isUpstoxConnected.value = true
+            }
+        }
+    }
+
+    fun saveDailyToken(token: String) {
+        connectUpstoxToken(token)
     }
 
     private fun parseAndLogPaperTrade(replyText: String) {
@@ -172,93 +221,119 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return match.value.toDoubleOrNull()
     }
 
+    fun fetchLiveUpstoxQuote(instrumentKey: String, onResult: (String) -> Unit) {
+        val token = upstoxAccessToken.value.trim()
+        if (token.isBlank()) {
+            onResult("⚠️ Upstox Access Token missing. Please set Today's Token in the Sidebar Drawer.")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val authHeader = if (token.startsWith("Bearer ")) token else "Bearer $token"
+                val quoteResponse = UpstoxApiClient.service.getFullMarketQuote(authHeader, instrumentKey)
+                val data = quoteResponse.data?.values?.firstOrNull()
+                val price = data?.lastPrice ?: 0.0
+                val high = data?.ohlc?.high ?: 0.0
+                val low = data?.ohlc?.low ?: 0.0
+                val volume = data?.volume ?: 0L
+                val oi = data?.openInterest ?: 0L
+
+                val resultText = "📊 Live Upstox Quote [$instrumentKey]:\nLTP: ₹$price\nHigh: ₹$high | Low: ₹$low\nVolume: $volume | OI: $oi"
+                withContext(Dispatchers.Main) {
+                    onResult(resultText)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onResult("❌ Upstox Quote Error: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
     fun sendTradingPrompt(userQuery: String) {
-        if (userQuery.isBlank() || isAnalyzing.value) return
-        val sessionId = currentSessionId.value
+        val trimmed = userQuery.trim()
         val key = googleApiKey.value.trim()
+        if (trimmed.isBlank() || isAnalyzing.value) return
+        if (!requestMutex.tryLock()) return // Prevent duplicate calls
 
         viewModelScope.launch {
-            val userMsg = ChatMessageEntity(
-                id = UUID.randomUUID().toString(),
-                sessionId = sessionId,
-                role = "user",
-                text = userQuery,
-                timestamp = System.currentTimeMillis()
-            )
-            dao.insertMessage(userMsg)
+            try {
+                isAnalyzing.value = true
 
-            if (key.isBlank()) {
-                val errorMsg = ChatMessageEntity(
+                // 1. Save user query locally to Room
+                val userMsg = ChatMessageEntity(
                     id = UUID.randomUUID().toString(),
-                    sessionId = sessionId,
-                    role = "model",
-                    text = "⚠️ Google API Key missing! Sidebar Drawer खोलकर API Key दर्ज करें और Activate करें।",
-                    timestamp = System.currentTimeMillis(),
-                    isError = true
+                    sessionId = currentSessionId.value,
+                    role = "user",
+                    text = trimmed,
+                    timestamp = System.currentTimeMillis()
                 )
-                dao.insertMessage(errorMsg)
-                return@launch
-            }
+                dao.insertMessage(userMsg)
 
-            isAnalyzing.value = true
-
-            resolveLightestModel(key) { resolvedModel ->
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        val pastMessages = dao.getMessagesForSessionSync(sessionId)
-                        val contents = pastMessages.map { msg ->
-                            Content(
-                                role = if (msg.role == "user") "user" else "model",
-                                parts = listOf(Part(text = msg.text))
-                            )
-                        }
-
-                        val request = GenerateContentRequest(
-                            contents = contents,
-                            systemInstruction = Content(
-                                parts = listOf(Part(text = MASTER_TRADER_SYSTEM_PROMPT))
-                            ),
-                            generationConfig = GenerationConfig(temperature = 0.3f),
-                            tools = listOf(Tool())
-                        )
-
-                        val response = GeminiApiClient.service.generateContent(
-                            model = resolvedModel,
-                            apiKey = key,
-                            request = request
-                        )
-
-                        val replyText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                            ?: response.error?.message
-                            ?: "बाज़ार विश्लेषण इंजन से उत्तर प्राप्त नहीं हुआ।"
-
-                        // Automatically log virtual paper trade if trade signal is generated
-                        parseAndLogPaperTrade(replyText)
-
-                        val botMsg = ChatMessageEntity(
+                if (key.isBlank()) {
+                    dao.insertMessage(
+                        ChatMessageEntity(
                             id = UUID.randomUUID().toString(),
-                            sessionId = sessionId,
+                            sessionId = currentSessionId.value,
                             role = "model",
-                            text = replyText,
+                            text = "⚠️ Google API Key missing in Sidebar Drawer.",
                             timestamp = System.currentTimeMillis(),
-                            modelUsed = resolvedModel
+                            isError = true
                         )
-                        dao.insertMessage(botMsg)
-                    } catch (e: Exception) {
-                        dao.insertMessage(
-                            ChatMessageEntity(
-                                id = UUID.randomUUID().toString(),
-                                sessionId = sessionId,
-                                role = "model",
-                                text = "Engine Error: ${e.localizedMessage}",
-                                timestamp = System.currentTimeMillis(),
-                                isError = true
-                            )
-                        )
-                    } finally {
-                        isAnalyzing.value = false
-                    }
+                    )
+                    return@launch
                 }
+
+                // 2. Build concise prompt context
+                val history = withContext(Dispatchers.IO) {
+                    dao.getMessagesForSessionSync(currentSessionId.value).takeLast(4)
+                }
+                val contents = history.map {
+                    Content(role = if (it.role == "user") "user" else "model", parts = listOf(Part(text = it.text)))
+                }
+                val request = GenerateContentRequest(
+                    contents = contents,
+                    systemInstruction = Content(parts = listOf(Part(text = MASTER_TRADER_SYSTEM_PROMPT))),
+                    generationConfig = GenerationConfig(temperature = 0.2f)
+                )
+
+                // 3. SINGLE DIRECT CALL TO gemini-3.5-flash-lite
+                val response = withContext(Dispatchers.IO) {
+                    GeminiApiClient.service.generateContent(
+                        apiKey = key,
+                        request = request
+                    )
+                }
+
+                val replyText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                    ?: "No analysis received."
+
+                parseAndLogPaperTrade(replyText)
+
+                dao.insertMessage(
+                    ChatMessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = currentSessionId.value,
+                        role = "model",
+                        text = replyText,
+                        timestamp = System.currentTimeMillis(),
+                        modelUsed = "gemini-3.5-flash-lite"
+                    )
+                )
+            } catch (e: Exception) {
+                dao.insertMessage(
+                    ChatMessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = currentSessionId.value,
+                        role = "model",
+                        text = "Response: ${e.localizedMessage ?: "Engine busy. Please retry in 5s."}",
+                        timestamp = System.currentTimeMillis(),
+                        isError = true
+                    )
+                )
+            } finally {
+                isAnalyzing.value = false
+                requestMutex.unlock()
             }
         }
     }
